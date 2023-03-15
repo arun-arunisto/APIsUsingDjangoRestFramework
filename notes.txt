@@ -1,0 +1,406 @@
+----------------------- TODO API  ----------------------------
+'''
+install django
+install django-rest-framework
+create Project
+create app
+
+'''
+
+in settings.py add app to the installed apps field
+[
+.....,
+'rest_framework',
+'todo_api',
+]
+
+then map urls of the todo_api using include, so first import include
+&
+add below line to url_patterns in urls.py
+[
+....,
+path('', include("todo_api.urls")),
+]
+
+then create models for the database in models.py
+'''
+class TodoApi(models.Model):
+    todo = models.CharField(max_length=100)
+    timestamp = models.DateTimeField(auto_now_add=True, auto_now=False, blank=True)
+    completed = models.BooleanField(default=False, blank=True)
+    updated = models.DateTimeField(auto_now=True, blank=True)
+
+    def __str__(self):
+        return self.todo
+'''
+
+convert the model object to an API format, create a py file
+serializers.py in your app folder and add code into it
+'''
+from rest_framework import serializers
+from .models import TodoApi
+
+class TodoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TodoApi
+        fields = ["todo", "timestamp", "completed", "updated"]
+'''
+
+then create views, add code into views.py
+'''
+from django.shortcuts import render
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .models import TodoApi
+from .serializers import TodoSerializer
+
+# Create your views here.
+class TodoListApiView(APIView):
+    #1. List all
+    def get(self, request, *args, **kwargs):
+        todos = TodoApi.objects.all()
+        serializer = TodoSerializer(todos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    #2. Create
+    def post(self, request, *args, **kwargs):
+        data = {
+            "todo":request.data.get("todo"),
+            "completed":request.data.get("completed")
+        }
+        serializer = TodoSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+'''
+
+then add view into urls.py in app folder
+'''
+from django.urls import path, include
+from .views import (
+    TodoListApiView,
+)
+
+urlpatterns = [
+    path('api', TodoListApiView.as_view()),
+]
+'''
+
+After that make migrations and runserver
+add data in content like
+'''
+{
+    "todo":"New todo",
+    "completed":false
+}
+'''
+
+then we are create a new class for detail view of todo
+for delete and update the todo in views.py
+'''
+class TodoDetailApiView(APIView): #to detail view of an single todo
+    def get_object(self, todo_id):
+        try:
+            return TodoApi.objects.get(id=todo_id)
+        except TodoApi.DoesNotExist:
+            return None
+
+    def get(self, todo_id, *args, **kwargs):
+        #retrieves the todo with given todo_id
+        todo_instance = self.get_object(todo_id)
+        if not todo_instance:
+            return Response(
+                {"res":"Object with todo id does not exist"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        serializer = TodoSerializer(todo_instance)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    #update
+    def put(self, request, todo_id, *args, **kwargs):
+        todo_instance = self.get_object(todo_id)
+        if not todo_instance:
+            return Response(
+                {"res": "Object with todo id does not exist"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        data = {
+            "todo":request.data.get("todo"),
+            "completed":request.data.get("completed")
+        }
+        serializer = TodoSerializer(instance=todo_instance, data=data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    #delete
+    def delete(self, todo_id, *args, **kwargs):
+        todo_instance = self.get_object(todo_id)
+        if not todo_instance:
+            return Response(
+                {"res": "Object with todo id does not exist"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        todo_instance.delete()
+        return Response(
+            {"res":"Object deleted!"}
+        )
+
+'''
+
+then change the app url file by adding new class
+'''
+from django.urls import path, include
+from .views import (
+    TodoListApiView,
+    TodoDetailApiView,
+)
+
+urlpatterns = [
+    path('api', TodoListApiView.as_view()),
+    path('api/<int:todo_id>/', TodoDetailApiView.as_view())
+]
+'''
+--------------------------------------------------------------
+-------------------- Register, Login & Logout ----------------
+#Register and Login API using drf and Token Authentication
+Create app
+add app to settings.py file
+create serializers.py file in api folder and add code into it
+open views.py and code into it
+next create urls.py file in app folder and add code into it
+add code into urls.py in project folder
+-------------------- Music API -------------------------------
+#user authentication in this API
+create app
+assign app to the settings.py file
+then add app to the urls.py in project folder
+then create database models in models.py file in app
+and add this code into it
+'''
+from django.db import models
+
+# Create your models here.
+class Tracks(models.Model):
+    title = models.CharField(max_length=255, null=False)
+    artist = models.CharField(max_length=, null=False)
+    uploaded_at = models.DateTimeField(auto_now_add=True, auto_now=False, blank=True)
+
+    def __str__(self):
+        return self.title
+'''
+
+after that create serializers.py file in app folder
+and add below code into it.
+'''
+from rest_framework import serializers
+from django.contrib.auth.models import User
+#user we used for the authentification
+
+from .models import Tracks
+
+class TrackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tracks
+        fields = ("title", "artist", "uploaded_at")
+
+
+class TokenSerializer(serializers.Serializer):
+    #this serializer serializes the token data
+    token = serializers.CharField(max_length=255)
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("username", "email")
+
+
+'''
+
+after that you need to create decorators.py in your app folder
+it's an essentially function that take another function as an argument
+and extend its behaviour without modifying its source code.
+'''
+from rest_framework.response import Response
+from rest_framework.views import status
+
+def validate_request_data(fn):
+    def decorated(*args, **kwargs):
+        title = args[0].request.data.get("title", "")
+        artist = args[0].request.data.get("artist", "")
+        if not title and not artist:
+            return Response(
+                data={
+                    "message":"Both tile and artist are required"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return fn(*args, **kwargs)
+    return decorated
+'''
+
+next create views in views.py
+in views we restframework_jwt for transmit information between parties securely
+before you adding jWT to views you need to set that on your settings.py
+'''
+JWT_AUTH = {
+    'JWT_ENCODE_HANDLER':'rest_framework_jwt.utils.jwt_encode_handler',
+    'JWT_DECODE_HANDLER':'rest_framework_jwt.utils.jwt_decode_handler',
+    'JWT_PAYLOAD_HANDLER':'rest_framework_jwt.utils.jwt_payload_handler',
+    'JWT_PAYLOAD_GET_USER_ID_HANDLER':'rest_framework_jwt.utils.jwt_get_user_id_from_payload_handler',
+    'JWT_RESPONSE_PAYLOAD_HANDLER':'rest_framework_jwt.utils.jwt_response_payload_handler',
+    'JWT_SECRET_KEY':SECRET_KEY,
+    'JWT_GET_USER_SECRET_KEY':None,
+    'JWT_PUBLIC_KEY':None,
+    'JWT_PRIVATE_KEY':None,
+    'JWT_ALGORITHM':'HS256',
+    'JWT_VERIFY':True,
+    'JWT_VERIFY_EXPIRATION':True,
+    'JWT_LEEWAY':0,
+    'JWT_EXPIRATION_DELTA':datetime.timedelta(seconds=300),
+    'JWT_AUDIENCE':None,
+    'JWT_ISSUER':None,
+    'JWT_ALLOW_REFRESH':False,
+    'JWT_REFRESH_EXPIRATION_DELTA':datetime.timedelta(days=7),
+    'JWT_AUTH_HEADER_PREFIX':'Bearer',
+    'JWT_AUTH_COOKIE':None,
+}
+'''
+
+After create views
+'''
+from django.shortcuts import render
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate, login
+from rest_framework import generics
+from rest_framework import permissions
+from rest_framework.response import Response
+from rest_framework.views import status
+from rest_framework_jwt.settings import api_settings
+from .decorators import validate_request_data
+from .models import Tracks
+from .serializers import TrackSerializer, TokenSerializer, UserSerializer
+
+
+# Create your views here.
+#JWT settings
+jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
+jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
+
+class ListCreateSongsView(generics.ListCreateAPIView):
+    queryset = Tracks.objects.all()
+    serializer_class = TrackSerializer
+    permission_classes = (permissions.IsAuthenticated,) #checking that user is authenticated
+
+    @validate_request_data #the function that we created in decorators.py
+    def post(self, request, *args, **kwargs):
+        a_song = Tracks.objects.create(
+            title=request.data["title"],
+            artist=request.data["artist"]
+        )
+        return Response(data=TrackSerializer(a_song).data,
+                        status=status.HTTP_201_CREATED)
+
+class TrackDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Tracks.objects.all()
+    serializer_class = TrackSerializer
+
+    #get single track
+    def get(self, request, *args, **kwargs):
+        try:
+            a_song = self.queryset.get(pk=kwargs["pk"])
+            return Response(TrackSerializer(a_song).data)
+        except Tracks.DoesNotExist:
+            return Response(
+                data={
+                    "message":"Track id {} does not exist".format(kwargs["pk"])
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    @validate_request_data
+    #update
+    def put(self, request, *args, **kwargs):
+        try:
+            a_song = self.queryset.get(pk=kwargs["pk"])
+            serializer = TrackSerializer()
+            updated_song = serializer.update(a_song, request.data)
+            return Response(TrackSerializer(updated_song).data)
+        except Tracks.DoesNotExist:
+            return Response(
+                data={
+                    "message":"Track id {} does not exist".format(kwargs["pk"])
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    #delete
+    def delete(self, request, *args, **kwargs):
+        try:
+            a_song = self.queryset.get(pk=kwargs["pk"])
+            a_song.delete()
+            return Response(status=status.HTTP_200_OK)
+        except Tracks.DoesNotExist:
+            return Response(
+                data={
+                    "message":"Tracks id {} does not exist".format(kwargs["pk"])
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+#users login
+class LoginView(generics.CreateAPIView):
+    permission_classes = (permissions.AllowAny,)
+    queryset = User.objects.all()
+
+    def post(self, request, *args, **kwargs):
+        username = request.data.get("username", "")
+        password = request.data.get("password", "")
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            serializer = TrackSerializer(data={
+                'token':jwt_encode_handler(jwt_payload_handler(user))
+            })
+            serializer.is_valid()
+            return Response(serializer.data)
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+#reegister
+class RegisterUsers(generics.CreateAPIView):
+    permission_classes = (permissions.AllowAny,)
+    def post(self, request, *args, **kwargs):
+        username = request.data.get("username", "")
+        password = request.data.get("password", "")
+        email = request.data.get("email", "")
+        if not username and not password and not email:
+            return Response(
+                data={
+                    "message":"Username, password and email is required"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        new_user = User.objects.create_user(
+            username=username, password=password, email=email
+        )
+        return Response(
+            data=UserSerializer(new_user).data,
+            status=status.HTTP_201_CREATED
+        )
+'''
+
+then create urls.py file in your project folder and write codes into it
+'''
+from django.urls import path
+from .views import ListCreateSongsView, TrackDetailView, LoginView, RegisterUsers
+
+
+urlpatterns = [
+    path('tracks/', ListCreateSongsView.as_view(),name="tracks-list-view"),
+    path('tracks/<int:pk>/', TrackDetailView.as_view(), name="tracks-detail-view"),
+    path("auth/login/", LoginView.as_view(), name="auth-login"),
+    path("auth/register/", RegisterUsers.as_view(), name="auth-register")
+]
+'''
